@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Estudio">
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Estudio</title>
+<style>
+:root{
+  --bg:#f5f5f7;--card:#fff;--text:#1c1c1e;--muted:#6b7280;--accent:#4f46e5;--accent-text:#fff;
+  --border:#e5e7eb;--danger:#dc2626;--ok:#16a34a;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0f0f12;--card:#1a1a1f;--text:#f3f4f6;--muted:#9ca3af;--accent:#818cf8;--accent-text:#0f0f12;--border:#2b2b33;--danger:#f87171;--ok:#4ade80}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:16px}
+body{padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 84px)}
+main{max-width:640px;margin:0 auto}
+h1{font-size:22px;margin:4px 0 14px}
+h2{font-size:17px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+select,input,textarea,button{font:inherit;color:inherit}
+select,input[type=text],input[type=number],input[type=password],textarea{
+  width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);outline:none}
+textarea{min-height:200px;resize:vertical;line-height:1.45}
+select:focus,input:focus,textarea:focus{border-color:var(--accent)}
+button{border:0;border-radius:12px;padding:11px 16px;background:var(--accent);color:var(--accent-text);font-weight:600;cursor:pointer}
+button.secondary{background:transparent;color:var(--accent);border:1px solid var(--border)}
+button.danger{background:transparent;color:var(--danger);border:1px solid var(--border)}
+button:disabled{opacity:.5}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row>*{flex:1}
+.row>button{flex:0 0 auto}
+.muted{color:var(--muted);font-size:14px}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--border);
+  display:flex;padding:8px 8px calc(env(safe-area-inset-bottom) + 8px)}
+nav button{flex:1;background:transparent;color:var(--muted);padding:8px 2px;font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button .ic{font-size:20px}
+nav button.active{color:var(--accent)}
+.view{display:none}.view.active{display:block}
+.timer{font-size:68px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums;margin:8px 0}
+.mode{text-align:center;font-weight:600;color:var(--accent)}
+.modes{display:flex;gap:6px;justify-content:center;margin-bottom:6px}
+.modes button{padding:6px 12px;font-size:13px;background:transparent;color:var(--muted);border:1px solid var(--border)}
+.modes button.active{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.btns{display:flex;gap:10px;justify-content:center;margin-top:8px}
+.btns button{min-width:110px}
+.stat{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.stat:last-child{border-bottom:0}
+.q{border:1px solid var(--border);border-radius:14px;padding:14px;margin-top:12px;background:var(--bg)}
+.q .qt{font-weight:600;margin-bottom:8px}
+.q .guide,.q .fb{margin-top:10px;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border);white-space:pre-wrap;font-size:15px}
+.q textarea{min-height:90px}
+.err{color:var(--danger);font-size:14px;margin-top:10px;white-space:pre-wrap}
+.empty{text-align:center;color:var(--muted);padding:20px 0}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--bg);border:1px solid var(--border);font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <!-- POMODORO -->
+  <section id="v-timer" class="view active">
+    <h1>Pomodoro</h1>
+    <div class="card">
+      <label for="t-subject">Asignatura</label>
+      <select id="t-subject"></select>
+      <div class="timer" id="clock">25:00</div>
+      <div class="modes" id="modes">
+        <button data-mode="work">Estudio</button>
+        <button data-mode="short">Pausa corta</button>
+        <button data-mode="long">Pausa larga</button>
+      </div>
+      <div class="btns">
+        <button id="t-start">Iniciar</button>
+        <button id="t-reset" class="secondary">Reiniciar</button>
+      </div>
+      <p class="muted" id="t-hint" style="text-align:center;margin:12px 0 0"></p>
+    </div>
+    <div class="card">
+      <h2>Tiempo estudiado</h2>
+      <div id="stats"></div>
+    </div>
+  </section>
+
+  <!-- NOTAS -->
+  <section id="v-notes" class="view">
+    <h1>Notas</h1>
+    <div class="card">
+      <div class="row">
+        <select id="n-subject"></select>
+        <button id="n-add" class="secondary">+ Nueva</button>
+      </div>
+      <div id="n-body" style="display:none">
+        <label for="n-text">Apuntes de la asignatura (se guardan solos)</label>
+        <textarea id="n-text" placeholder="Escribe aquí tus notas básicas..."></textarea>
+        <div class="row" style="margin-top:10px">
+          <span class="muted" id="n-saved"></span>
+          <button id="n-rename" class="secondary">Renombrar</button>
+          <button id="n-del" class="danger">Borrar</button>
+        </div>
+      </div>
+      <div id="n-empty" class="empty">Crea tu primera asignatura con “+ Nueva”.</div>
+    </div>
+  </section>
+
+  <!-- PREGUNTAS -->
+  <section id="v-quiz" class="view">
+    <h1>Preguntas con IA</h1>
+    <div class="card">
+      <label for="q-subject">Asignatura</label>
+      <select id="q-subject"></select>
+      <div id="q-body" style="display:none">
+        <label for="q-syllabus">Temario (pega texto o sube un archivo .txt / .md)</label>
+        <textarea id="q-syllabus" placeholder="Pega aquí el temario, apuntes o el texto de un paper..."></textarea>
+        <div class="row" style="margin-top:10px">
+          <input type="file" id="q-file" accept=".txt,.md,text/plain,text/markdown">
+          <span class="muted" id="q-count"></span>
+        </div>
+        <div class="row">
+          <div>
+            <label for="q-num">Nº de preguntas</label>
+            <input type="number" id="q-num" min="1" max="15" value="5">
+          </div>
+          <div>
+            <label for="q-level">Estilo</label>
+            <select id="q-level">
+              <option value="abstract">Abstractas (relacionar ideas)</option>
+              <option value="critical">Pensamiento crítico</option>
+              <option value="application">Aplicación a casos nuevos</option>
+              <option value="mixed">Mezcla</option>
+            </select>
+          </div>
+        </div>
+        <div class="btns" style="justify-content:flex-start"><button id="q-gen">Generar preguntas</button></div>
+        <div class="err" id="q-err"></div>
+      </div>
+      <div id="q-empty" class="empty">Primero crea una asignatura en la pestaña Notas.</div>
+    </div>
+    <div id="q-list"></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section id="v-settings" class="view">
+    <h1>Ajustes</h1>
+    <div class="card">
+      <h2>Pomodoro (minutos)</h2>
+      <div class="row">
+        <div><label>Estudio</label><input type="number" id="s-work" min="1" max="180"></div>
+        <div><label>Pausa corta</label><input type="number" id="s-short" min="1" max="60"></div>
+        <div><label>Pausa larga</label><input type="number" id="s-long" min="1" max="90"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>IA (Gemini, gratis)</h2>
+      <p class="muted">Consigue una clave gratuita en <b>aistudio.google.com/apikey</b> (necesitas una cuenta de Google). Se guarda solo en este dispositivo.</p>
+      <label for="s-key">Clave de API</label>
+      <input type="password" id="s-key" autocomplete="off" placeholder="AIza...">
+      <label for="s-model">Modelo</label>
+      <input type="text" id="s-model" autocomplete="off">
+      <p class="muted">Si Google cambia el nombre del modelo y falla, pon aquí uno vigente (por ejemplo, un “flash” reciente de la lista de AI Studio).</p>
+    </div>
+    <div class="card">
+      <h2>Datos</h2>
+      <div class="row">
+        <button id="s-export" class="secondary">Exportar copia</button>
+        <button id="s-import" class="secondary">Importar copia</button>
+      </div>
+      <input type="file" id="s-importfile" accept=".json" style="display:none">
+      <p class="muted">Todo se guarda en el navegador de tu iPhone. Haz copias de vez en cuando: si borras los datos de Safari, se pierden.</p>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-view="timer" class="active"><span class="ic">⏱</span>Pomodoro</button>
+  <button data-view="notes"><span class="ic">📝</span>Notas</button>
+  <button data-view="quiz"><span class="ic">🧠</span>Preguntas</button>
+  <button data-view="settings"><span class="ic">⚙️</span>Ajustes</button>
+</nav>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const KEY = "estudio.v1";
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+/* ---------- Estado ---------- */
+let S = load();
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d && d.subjects) return Object.assign({
+      sessions: [], timer: null, selected: null,
+      settings: { work: 25, short: 5, long: 15, key: "", model: "gemini-2.5-flash" }
+    }, d, { settings: Object.assign({ work: 25, short: 5, long: 15, key: "", model: "gemini-2.5-flash" }, d.settings) });
+  } catch (e) {}
+  return { subjects: [], sessions: [], timer: null, selected: null,
+    settings: { work: 25, short: 5, long: 15, key: "", model: "gemini-2.5-flash" } };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { alert("No se pudo guardar (almacenamiento lleno). Exporta una copia y reduce el temario."); }
+}
+const subj = id => S.subjects.find(s => s.id === id);
+const cur = () => subj(S.selected) || S.subjects[0] || null;
+
+/* ---------- Navegación ---------- */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "v-" + b.dataset.view));
+  refreshAll();
+});
+
+/* ---------- Selectores de asignatura ---------- */
+function fillSelect(sel) {
+  sel.innerHTML = "";
+  S.subjects.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.id; o.textContent = s.name; sel.appendChild(o);
+  });
+  const c = cur();
+  if (c) sel.value = c.id;
+}
+["#t-subject", "#n-subject", "#q-subject"].forEach(id => {
+  $(id).onchange = e => { S.selected = e.target.value; save(); refreshAll(); };
+});
+
+/* ---------- Pomodoro ---------- */
+const MODE_NAMES = { work: "Estudio", short: "Pausa corta", long: "Pausa larga" };
+let mode = "work";
+let tickTimer = null;
+
+function modeMs(m) { return S.settings[m] * 60000; }
+function fmt(ms) {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+document.querySelectorAll("#modes button").forEach(b => b.onclick = () => {
+  if (S.timer && S.timer.endAt) return;
+  mode = b.dataset.mode; S.timer = null; save(); renderTimer();
+});
+$("#t-start").onclick = () => {
+  if (S.timer && S.timer.endAt) {               // pausar
+    S.timer = { mode, remaining: S.timer.endAt - Date.now(), endAt: null };
+  } else {                                      // iniciar / reanudar
+    const rem = S.timer && S.timer.remaining ? S.timer.remaining : modeMs(mode);
+    S.timer = { mode, endAt: Date.now() + rem, remaining: null, subjectId: cur() ? cur().id : null,
+                total: modeMs(mode) };
+    unlockAudio();
+  }
+  save(); renderTimer();
+};
+$("#t-reset").onclick = () => { S.timer = null; save(); renderTimer(); };
+
+function renderTimer() {
+  document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+  const running = S.timer && S.timer.endAt;
+  let ms = running ? S.timer.endAt - Date.now()
+         : (S.timer && S.timer.remaining) ? S.timer.remaining : modeMs(mode);
+  if (running && ms <= 0) return finishTimer();
+  $("#clock").textContent = fmt(ms);
+  document.title = running ? fmt(ms) + " · " + MODE_NAMES[mode] : "Estudio";
+  $("#t-start").textContent = running ? "Pausar" : (S.timer && S.timer.remaining ? "Reanudar" : "Iniciar");
+  $("#t-hint").textContent = !cur() ? "Crea una asignatura en Notas para registrar tu tiempo."
+    : running ? "Mantén la app abierta; si la cierras, el tiempo seguirá contando." : "";
+}
+function finishTimer() {
+  const t = S.timer;
+  if (mode === "work" && t) {
+    S.sessions.push({ subjectId: t.subjectId, minutes: Math.round(t.total / 60000), date: new Date().toISOString() });
+    mode = (S.sessions.filter(x => x.date.slice(0, 10) === new Date().toISOString().slice(0, 10)).length % 4 === 0) ? "long" : "short";
+  } else mode = "work";
+  S.timer = null; save();
+  beep();
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+  renderTimer(); renderStats();
+}
+let audioCtx = null;
+function unlockAudio() {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch (e) {}
+}
+function beep() {
+  try {
+    unlockAudio();
+    [0, 0.35, 0.7].forEach(d => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.25, audioCtx.currentTime + d);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + d + 0.3);
+      o.start(audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d + 0.3);
+    });
+  } catch (e) {}
+}
+function renderStats() {
+  const day = new Date().toISOString().slice(0, 10);
+  const weekAgo = Date.now() - 7 * 864e5;
+  const box = $("#stats"); box.innerHTML = "";
+  if (!S.subjects.length) { box.innerHTML = '<div class="empty">Sin datos todavía.</div>'; return; }
+  const add = (a, b) => { const d = document.createElement("div"); d.className = "stat";
+    const x = document.createElement("span"); x.textContent = a;
+    const y = document.createElement("b"); y.textContent = b; d.append(x, y); box.appendChild(d); };
+  const h = m => m >= 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : m + " min";
+  const sum = f => S.sessions.filter(f).reduce((a, s) => a + s.minutes, 0);
+  add("Hoy", h(sum(s => s.date.slice(0, 10) === day)));
+  add("Últimos 7 días", h(sum(s => new Date(s.date).getTime() >= weekAgo)));
+  S.subjects.forEach(s => add("· " + s.name, h(sum(x => x.subjectId === s.id))));
+}
+
+/* ---------- Notas ---------- */
+$("#n-add").onclick = () => {
+  const name = (prompt("Nombre de la asignatura:") || "").trim();
+  if (!name) return;
+  const s = { id: uid(), name, notes: "", syllabus: "", questions: [] };
+  S.subjects.push(s); S.selected = s.id; save(); refreshAll();
+};
+$("#n-rename").onclick = () => {
+  const c = cur(); if (!c) return;
+  const name = (prompt("Nuevo nombre:", c.name) || "").trim();
+  if (name) { c.name = name; save(); refreshAll(); }
+};
+$("#n-del").onclick = () => {
+  const c = cur(); if (!c) return;
+  if (!confirm("¿Borrar “" + c.name + "” con sus notas y temario?")) return;
+  S.subjects = S.subjects.filter(s => s.id !== c.id);
+  S.sessions = S.sessions.filter(s => s.subjectId !== c.id);
+  S.selected = S.subjects[0] ? S.subjects[0].id : null; save(); refreshAll();
+};
+let noteT;
+$("#n-text").oninput = e => {
+  const c = cur(); if (!c) return;
+  c.notes = e.target.value; $("#n-saved").textContent = "Guardando…";
+  clearTimeout(noteT); noteT = setTimeout(() => { save(); $("#n-saved").textContent = "Guardado ✓"; }, 400);
+};
+function renderNotes() {
+  const c = cur();
+  $("#n-body").style.display = c ? "block" : "none";
+  $("#n-empty").style.display = c ? "none" : "block";
+  if (c && document.activeElement !== $("#n-text")) $("#n-text").value = c.notes;
+  $("#n-saved").textContent = "";
+}
+
+/* ---------- Preguntas con IA ---------- */
+let syT;
+$("#q-syllabus").oninput = e => {
+  const c = cur(); if (!c) return;
+  c.syllabus = e.target.value; updateCount();
+  clearTimeout(syT); syT = setTimeout(save, 500);
+};
+function updateCount() {
+  const c = cur(); $("#q-count").textContent = c ? c.syllabus.length.toLocaleString("es") + " caracteres" : "";
+}
+$("#q-file").onchange = async e => {
+  const f = e.target.files[0]; const c = cur(); if (!f || !c) return;
+  const txt = await f.text();
+  c.syllabus = (c.syllabus ? c.syllabus + "\n\n" : "") + txt;
+  $("#q-syllabus").value = c.syllabus; updateCount(); save(); e.target.value = "";
+};
+const LEVELS = {
+  abstract: "preguntas abstractas y conceptuales que obliguen a relacionar ideas entre sí, explicar mecanismos y razonar por qué, sin pedir simples definiciones memorizadas",
+  critical: "preguntas de pensamiento crítico: limitaciones, hipótesis alternativas, diseño experimental, validez de las conclusiones",
+  application: "preguntas que apliquen los conceptos a casos o escenarios nuevos que no aparecen literalmente en el texto",
+  mixed: "una mezcla de preguntas abstractas, de pensamiento crítico y de aplicación a casos nuevos"
+};
+async function gemini(prompt, json) {
+  const { key, model } = S.settings;
+  if (!key) throw new Error("Falta la clave de API. Añádela en Ajustes.");
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
+  const body = { contents: [{ parts: [{ text: prompt }] }] };
+  if (json) body.generationConfig = { responseMimeType: "application/json" };
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data.error && data.error.message) || ("Error " + r.status));
+  const t = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+  if (!t) throw new Error("La IA no devolvió respuesta (puede haberse bloqueado el contenido).");
+  return t.map(p => p.text || "").join("");
+}
+$("#q-gen").onclick = async () => {
+  const c = cur(); $("#q-err").textContent = "";
+  if (!c) return;
+  if (c.syllabus.trim().length < 80) { $("#q-err").textContent = "Añade más temario (mínimo unas líneas)."; return; }
+  const n = Math.min(15, Math.max(1, +$("#q-num").value || 5));
+  const prev = c.questions.slice(-20).map(q => "- " + q.q).join("\n");
+  const prompt = `Eres un profesor universitario de un máster de neurociencia cognitiva. A partir EXCLUSIVAMENTE del material siguiente, genera ${n} ${LEVELS[$("#q-level").value]}.
+Responde en español. Devuelve SOLO un array JSON con objetos {"q": "pregunta", "guide": "guía de respuesta con los puntos clave que debería incluir una buena respuesta"}.
+${prev ? "No repitas estas preguntas ya hechas:\n" + prev + "\n" : ""}
+MATERIAL:
+"""
+${c.syllabus.slice(0, 60000)}
+"""`;
+  const btn = $("#q-gen"); btn.disabled = true; btn.textContent = "Generando…";
+  try {
+    let txt = (await gemini(prompt, true)).trim().replace(/^```(?:json)?/i, "").replace(/```$/, "");
+    const arr = JSON.parse(txt);
+    if (!Array.isArray(arr) || !arr.length) throw new Error("Respuesta vacía.");
+    c.questions = arr.filter(x => x && x.q).map(x => ({ id: uid(), q: String(x.q), guide: String(x.guide || ""), answer: "", feedback: "" }));
+    save(); renderQuiz();
+  } catch (e) { $("#q-err").textContent = "No se pudieron generar las preguntas.\n" + e.message; }
+  btn.disabled = false; btn.textContent = "Generar preguntas";
+};
+function renderQuiz() {
+  const c = cur();
+  $("#q-body").style.display = c ? "block" : "none";
+  $("#q-empty").style.display = c ? "none" : "block";
+  const list = $("#q-list"); list.innerHTML = "";
+  if (!c) return;
+  if (document.activeElement !== $("#q-syllabus")) $("#q-syllabus").value = c.syllabus;
+  updateCount();
+  c.questions.forEach((q, i) => {
+    const d = document.createElement("div"); d.className = "q";
+    const t = document.createElement("div"); t.className = "qt"; t.textContent = (i + 1) + ". " + q.q;
+    const ta = document.createElement("textarea"); ta.placeholder = "Escribe tu respuesta…"; ta.value = q.answer;
+    ta.oninput = () => { q.answer = ta.value; clearTimeout(ta._t); ta._t = setTimeout(save, 500); };
+    const row = document.createElement("div"); row.className = "row"; row.style.marginTop = "8px";
+    const bFb = document.createElement("button"); bFb.textContent = "Corregir mi respuesta";
+    const bGd = document.createElement("button"); bGd.className = "secondary"; bGd.textContent = "Ver guía";
+    row.append(bFb, bGd);
+    const guide = document.createElement("div"); guide.className = "guide"; guide.style.display = "none"; guide.textContent = q.guide;
+    const fb = document.createElement("div"); fb.className = "fb"; fb.style.display = q.feedback ? "block" : "none"; fb.textContent = q.feedback;
+    bGd.onclick = () => { guide.style.display = guide.style.display === "none" ? "block" : "none"; };
+    bFb.onclick = async () => {
+      if (q.answer.trim().length < 5) { fb.style.display = "block"; fb.textContent = "Escribe primero tu respuesta."; return; }
+      bFb.disabled = true; bFb.textContent = "Corrigiendo…"; fb.style.display = "block"; fb.textContent = "…";
+      try {
+        const p = `Eres un profesor exigente pero constructivo de neurociencia cognitiva. Pregunta: "${q.q}"
+Guía de respuesta: ${q.guide}
+Respuesta del alumno: """${q.answer}"""
+En español y de forma breve (máx. 120 palabras): di qué está bien, qué falta o es incorrecto, y cómo mejorarla. Termina con una nota orientativa sobre 10.`;
+        q.feedback = (await gemini(p, false)).trim(); save();
+      } catch (e) { q.feedback = "Error: " + e.message; }
+      fb.textContent = q.feedback; bFb.disabled = false; bFb.textContent = "Corregir mi respuesta";
+    };
+    d.append(t, ta, row, guide, fb); list.appendChild(d);
+  });
+}
+
+/* ---------- Ajustes ---------- */
+function renderSettings() {
+  $("#s-work").value = S.settings.work; $("#s-short").value = S.settings.short; $("#s-long").value = S.settings.long;
+  $("#s-key").value = S.settings.key; $("#s-model").value = S.settings.model;
+}
+["work", "short", "long"].forEach(k => $("#s-" + k).onchange = e => {
+  S.settings[k] = Math.max(1, +e.target.value || S.settings[k]); S.timer = null; save(); renderTimer();
+});
+$("#s-key").onchange = e => { S.settings.key = e.target.value.trim(); save(); };
+$("#s-model").onchange = e => { S.settings.model = e.target.value.trim() || "gemini-2.5-flash"; save(); };
+$("#s-export").onclick = () => {
+  const copy = JSON.parse(JSON.stringify(S)); copy.settings.key = "";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(copy)], { type: "application/json" }));
+  a.download = "estudio-copia-" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
+};
+$("#s-import").onclick = () => $("#s-importfile").click();
+$("#s-importfile").onchange = async e => {
+  try {
+    const d = JSON.parse(await e.target.files[0].text());
+    if (!d.subjects) throw 0;
+    if (!confirm("Esto reemplazará tus datos actuales. ¿Continuar?")) return;
+    d.settings = Object.assign({}, S.settings, d.settings, { key: S.settings.key });
+    S = Object.assign(S, d); save(); refreshAll();
+  } catch (_) { alert("Archivo no válido."); }
+  e.target.value = "";
+};
+
+/* ---------- Render global ---------- */
+function refreshAll() {
+  ["#t-subject", "#n-subject", "#q-subject"].forEach(id => fillSelect($(id)));
+  renderTimer(); renderStats(); renderNotes(); renderQuiz(); renderSettings();
+}
+if (S.timer && S.timer.mode) mode = S.timer.mode;
+refreshAll();
+setInterval(() => { if (document.getElementById("v-timer").classList.contains("active")) renderTimer(); else if (S.timer && S.timer.endAt && S.timer.endAt <= Date.now()) finishTimer(); }, 500);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) renderTimer(); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
