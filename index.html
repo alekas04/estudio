@@ -168,6 +168,32 @@ nav button.active{color:var(--accent)}
       <p class="muted">Si Google cambia el nombre del modelo y falla, pon aquí uno vigente (por ejemplo, un “flash” reciente de la lista de AI Studio).</p>
     </div>
     <div class="card">
+      <h2>Sincronización (opcional)</h2>
+      <p class="muted">Sincroniza notas, temarios y tiempo estudiado entre tus dispositivos con una cuenta gratuita de Supabase.</p>
+      <div id="sy-out">
+        <label for="sy-url">URL del proyecto</label>
+        <input type="text" id="sy-url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://xxxx.supabase.co">
+        <label for="sy-key">Clave pública (publishable / anon)</label>
+        <input type="text" id="sy-key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="sb_publishable_...">
+        <label for="sy-email">Correo</label>
+        <input type="text" id="sy-email" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <label for="sy-pass">Contraseña (mínimo 6 caracteres)</label>
+        <input type="password" id="sy-pass" autocomplete="current-password">
+        <div class="row" style="margin-top:10px">
+          <button id="sy-login">Iniciar sesión</button>
+          <button id="sy-signup" class="secondary">Crear cuenta</button>
+        </div>
+      </div>
+      <div id="sy-in" style="display:none">
+        <p style="margin:0 0 10px">Conectado como <b id="sy-who"></b></p>
+        <div class="row">
+          <button id="sy-now">Sincronizar ahora</button>
+          <button id="sy-logout" class="secondary">Cerrar sesión</button>
+        </div>
+      </div>
+      <div class="muted" id="sy-status" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
       <h2>Datos</h2>
       <div class="row">
         <button id="s-export" class="secondary">Exportar copia</button>
@@ -193,7 +219,7 @@ const KEY = "estudio.v1";
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 /* ---------- Estado ---------- */
-let S = load();
+let S = normalize(load());
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(KEY));
@@ -205,9 +231,21 @@ function load() {
   return { subjects: [], sessions: [], timer: null, selected: null,
     settings: { work: 25, short: 5, long: 15, key: "", model: "gemini-2.5-flash" } };
 }
-function save() {
+function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { alert("No se pudo guardar (almacenamiento lleno). Exporta una copia y reduce el temario."); }
+}
+function save() { persist(); scheduleSync(); }
+function touch(c) { if (c) c.updatedAt = Date.now(); }
+function normalize(st) {
+  st.deleted = st.deleted || {};
+  st.subjects.forEach((s, i) => {
+    s.created = s.created || (s.updatedAt || 0) || (i + 1);
+    s.updatedAt = s.updatedAt || 1;
+    s.notes = s.notes || ""; s.syllabus = s.syllabus || ""; s.questions = s.questions || [];
+  });
+  st.sessions.forEach(x => { if (!x.id) x.id = "s-" + x.date + "-" + (x.subjectId || "") + "-" + x.minutes; });
+  return st;
 }
 const subj = id => S.subjects.find(s => s.id === id);
 const cur = () => subj(S.selected) || S.subjects[0] || null;
@@ -275,7 +313,7 @@ function renderTimer() {
 function finishTimer() {
   const t = S.timer;
   if (mode === "work" && t) {
-    S.sessions.push({ subjectId: t.subjectId, minutes: Math.round(t.total / 60000), date: new Date().toISOString() });
+    S.sessions.push({ id: uid(), subjectId: t.subjectId, minutes: Math.round(t.total / 60000), date: new Date().toISOString() });
     mode = (S.sessions.filter(x => x.date.slice(0, 10) === new Date().toISOString().slice(0, 10)).length % 4 === 0) ? "long" : "short";
   } else mode = "work";
   S.timer = null; save();
@@ -318,17 +356,19 @@ function renderStats() {
 $("#n-add").onclick = () => {
   const name = (prompt("Nombre de la asignatura:") || "").trim();
   if (!name) return;
-  const s = { id: uid(), name, notes: "", syllabus: "", questions: [] };
+  const now = Date.now();
+  const s = { id: uid(), name, notes: "", syllabus: "", questions: [], created: now, updatedAt: now };
   S.subjects.push(s); S.selected = s.id; save(); refreshAll();
 };
 $("#n-rename").onclick = () => {
   const c = cur(); if (!c) return;
   const name = (prompt("Nuevo nombre:", c.name) || "").trim();
-  if (name) { c.name = name; save(); refreshAll(); }
+  if (name) { c.name = name; touch(c); save(); refreshAll(); }
 };
 $("#n-del").onclick = () => {
   const c = cur(); if (!c) return;
   if (!confirm("¿Borrar “" + c.name + "” con sus notas y temario?")) return;
+  S.deleted[c.id] = Date.now();
   S.subjects = S.subjects.filter(s => s.id !== c.id);
   S.sessions = S.sessions.filter(s => s.subjectId !== c.id);
   S.selected = S.subjects[0] ? S.subjects[0].id : null; save(); refreshAll();
@@ -336,7 +376,7 @@ $("#n-del").onclick = () => {
 let noteT;
 $("#n-text").oninput = e => {
   const c = cur(); if (!c) return;
-  c.notes = e.target.value; $("#n-saved").textContent = "Guardando…";
+  c.notes = e.target.value; touch(c); $("#n-saved").textContent = "Guardando…";
   clearTimeout(noteT); noteT = setTimeout(() => { save(); $("#n-saved").textContent = "Guardado ✓"; }, 400);
 };
 function renderNotes() {
@@ -351,7 +391,7 @@ function renderNotes() {
 let syT;
 $("#q-syllabus").oninput = e => {
   const c = cur(); if (!c) return;
-  c.syllabus = e.target.value; updateCount();
+  c.syllabus = e.target.value; touch(c); updateCount();
   clearTimeout(syT); syT = setTimeout(save, 500);
 };
 function updateCount() {
@@ -361,7 +401,7 @@ $("#q-file").onchange = async e => {
   const f = e.target.files[0]; const c = cur(); if (!f || !c) return;
   const txt = await f.text();
   c.syllabus = (c.syllabus ? c.syllabus + "\n\n" : "") + txt;
-  $("#q-syllabus").value = c.syllabus; updateCount(); save(); e.target.value = "";
+  touch(c); $("#q-syllabus").value = c.syllabus; updateCount(); save(); e.target.value = "";
 };
 const LEVELS = {
   abstract: "preguntas abstractas y conceptuales que obliguen a relacionar ideas entre sí, explicar mecanismos y razonar por qué, sin pedir simples definiciones memorizadas",
@@ -401,7 +441,7 @@ ${c.syllabus.slice(0, 60000)}
     const arr = JSON.parse(txt);
     if (!Array.isArray(arr) || !arr.length) throw new Error("Respuesta vacía.");
     c.questions = arr.filter(x => x && x.q).map(x => ({ id: uid(), q: String(x.q), guide: String(x.guide || ""), answer: "", feedback: "" }));
-    save(); renderQuiz();
+    touch(c); save(); renderQuiz();
   } catch (e) { $("#q-err").textContent = "No se pudieron generar las preguntas.\n" + e.message; }
   btn.disabled = false; btn.textContent = "Generar preguntas";
 };
@@ -417,7 +457,7 @@ function renderQuiz() {
     const d = document.createElement("div"); d.className = "q";
     const t = document.createElement("div"); t.className = "qt"; t.textContent = (i + 1) + ". " + q.q;
     const ta = document.createElement("textarea"); ta.placeholder = "Escribe tu respuesta…"; ta.value = q.answer;
-    ta.oninput = () => { q.answer = ta.value; clearTimeout(ta._t); ta._t = setTimeout(save, 500); };
+    ta.oninput = () => { q.answer = ta.value; touch(c); clearTimeout(ta._t); ta._t = setTimeout(save, 500); };
     const row = document.createElement("div"); row.className = "row"; row.style.marginTop = "8px";
     const bFb = document.createElement("button"); bFb.textContent = "Corregir mi respuesta";
     const bGd = document.createElement("button"); bGd.className = "secondary"; bGd.textContent = "Ver guía";
@@ -433,7 +473,7 @@ function renderQuiz() {
 Guía de respuesta: ${q.guide}
 Respuesta del alumno: """${q.answer}"""
 En español y de forma breve (máx. 120 palabras): di qué está bien, qué falta o es incorrecto, y cómo mejorarla. Termina con una nota orientativa sobre 10.`;
-        q.feedback = (await gemini(p, false)).trim(); save();
+        q.feedback = (await gemini(p, false)).trim(); touch(c); save();
       } catch (e) { q.feedback = "Error: " + e.message; }
       fb.textContent = q.feedback; bFb.disabled = false; bFb.textContent = "Corregir mi respuesta";
     };
@@ -464,20 +504,190 @@ $("#s-importfile").onchange = async e => {
     if (!d.subjects) throw 0;
     if (!confirm("Esto reemplazará tus datos actuales. ¿Continuar?")) return;
     d.settings = Object.assign({}, S.settings, d.settings, { key: S.settings.key });
-    S = Object.assign(S, d); save(); refreshAll();
+    S = normalize(Object.assign(S, d)); save(); refreshAll();
   } catch (_) { alert("Archivo no válido."); }
   e.target.value = "";
 };
 
+/* ---------- Sincronización (Supabase) ---------- */
+// <merge>
+function stable(o) {
+  if (Array.isArray(o)) return "[" + o.map(stable).join(",") + "]";
+  if (o && typeof o === "object") return "{" + Object.keys(o).sort().map(k => JSON.stringify(k) + ":" + stable(o[k])).join(",") + "}";
+  return JSON.stringify(o);
+}
+function mergeData(a, b) {
+  a = a || {}; b = b || {};
+  const deleted = {};
+  [a.deleted, b.deleted].forEach(d => { for (const id in (d || {})) deleted[id] = Math.max(deleted[id] || 0, d[id]); });
+  const best = new Map();
+  [a.subjects, b.subjects].forEach(list => (list || []).forEach(s => {
+    const p = best.get(s.id);
+    if (!p || (s.updatedAt || 0) > (p.updatedAt || 0)) best.set(s.id, s);
+  }));
+  const subjects = [...best.values()]
+    .filter(s => !(deleted[s.id] && deleted[s.id] >= (s.updatedAt || 0)))
+    .sort((x, y) => ((x.created || 0) - (y.created || 0)) || (x.id < y.id ? -1 : 1));
+  const ids = new Set(subjects.map(s => s.id));
+  const seen = new Map();
+  [a.sessions, b.sessions].forEach(list => (list || []).forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); }));
+  const sessions = [...seen.values()]
+    .filter(x => !x.subjectId || ids.has(x.subjectId))
+    .sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : (x.id < y.id ? -1 : 1)));
+  return { subjects, sessions, deleted };
+}
+// </merge>
+
+const SYNC_KEY = "estudio.sync.v1";
+let sync = (() => {
+  const base = { url: "", key: "", session: null };
+  try { return Object.assign(base, JSON.parse(localStorage.getItem(SYNC_KEY))); } catch (e) { return base; }
+})();
+function persistSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch (e) {} }
+let syncing = false, syncAgain = false, lastSyncedStable = null, lastSyncAt = 0, lastInput = 0, syncTimer = null;
+document.addEventListener("input", () => { lastInput = Date.now(); }, true);
+
+function payload() { return { subjects: S.subjects, sessions: S.sessions, deleted: S.deleted }; }
+function apiBase() { return sync.url.replace(/\/+$/, ""); }
+function errText(d, status) { return (d && (d.error_description || d.msg || d.message || d.error)) || ("Error " + status); }
+function netMsg(e) { return e.message === "Failed to fetch" ? "sin conexión o URL incorrecta" : e.message; }
+
+async function authCall(path, body) {
+  const r = await fetch(apiBase() + "/auth/v1/" + path, {
+    method: "POST", headers: { "Content-Type": "application/json", apikey: sync.key }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(errText(d, r.status)), { status: r.status });
+  return d;
+}
+function setSession(d) {
+  sync.session = {
+    access_token: d.access_token, refresh_token: d.refresh_token,
+    expires_at: Date.now() + (d.expires_in || 3600) * 1000,
+    user_id: (d.user && d.user.id) || (sync.session && sync.session.user_id),
+    email: (d.user && d.user.email) || (sync.session && sync.session.email)
+  };
+  persistSync();
+}
+async function ensureToken() {
+  const s = sync.session;
+  if (s.expires_at - Date.now() > 60000) return;
+  try { setSession(await authCall("token?grant_type=refresh_token", { refresh_token: s.refresh_token })); }
+  catch (e) {
+    if (e.status === 400 || e.status === 401) {
+      sync.session = null; persistSync(); renderSyncUI();
+      throw new Error("Sesión caducada. Vuelve a iniciar sesión.");
+    }
+    throw e;
+  }
+}
+async function rest(method, query, body, extra) {
+  const r = await fetch(apiBase() + "/rest/v1/app_data" + query, {
+    method,
+    headers: Object.assign({ "Content-Type": "application/json", apikey: sync.key, Authorization: "Bearer " + sync.session.access_token }, extra || {}),
+    body: body ? JSON.stringify(body) : undefined });
+  const txt = await r.text();
+  let d = null; try { d = txt ? JSON.parse(txt) : null; } catch (e) {}
+  if (!r.ok) throw new Error(errText(d, r.status));
+  return d;
+}
+async function pullRemote() {
+  const rows = await rest("GET", "?select=data&user_id=eq." + sync.session.user_id);
+  return rows && rows[0] && rows[0].data ? rows[0].data : {};
+}
+async function pushRemote(data) {
+  await rest("POST", "?on_conflict=user_id",
+    { user_id: sync.session.user_id, data, updated_at: new Date().toISOString() },
+    { Prefer: "resolution=merge-duplicates,return=minimal" });
+}
+function applyMerged(m) {
+  const ae = document.activeElement;
+  if (ae && /^(TEXTAREA|INPUT)$/.test(ae.tagName)) ae.blur();
+  S.subjects = m.subjects; S.sessions = m.sessions; S.deleted = m.deleted;
+  if (!subj(S.selected)) S.selected = S.subjects[0] ? S.subjects[0].id : null;
+  persist(); refreshAll();
+}
+async function syncNow(manual) {
+  if (!sync.session) return;
+  if (syncing) { syncAgain = true; return; }
+  if (!manual && Date.now() - lastInput < 2000) { scheduleSync(true); return; }
+  syncing = true; setSyncStatus("Sincronizando…");
+  try {
+    await ensureToken();
+    const remote = await pullRemote();
+    const local = payload();                       // se lee DESPUÉS de esperar la red
+    const merged = mergeData(local, remote);
+    const sm = stable(merged);
+    if (sm !== stable(mergeData(local, {}))) applyMerged(merged);
+    if (sm !== stable(mergeData(remote, {}))) await pushRemote(merged);
+    lastSyncedStable = sm; lastSyncAt = Date.now();
+    setSyncStatus("Sincronizado ✓ " + new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }));
+  } catch (e) { setSyncStatus("Error de sincronización: " + netMsg(e), true); }
+  syncing = false;
+  if (syncAgain) { syncAgain = false; scheduleSync(true); }
+}
+function scheduleSync(force) {
+  if (!sync.session) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    if (force || stable(mergeData(payload(), {})) !== lastSyncedStable) syncNow(false);
+  }, 2500);
+}
+function syncSoon() { if (sync.session && Date.now() - lastSyncAt > 10000) syncNow(false); }
+setInterval(() => { if (!document.hidden) syncSoon(); }, 60000);
+
+function setSyncStatus(msg, isErr) {
+  const el = $("#sy-status"); el.textContent = msg; el.style.color = isErr ? "var(--danger)" : "";
+}
+function renderSyncUI() {
+  const on = !!sync.session;
+  $("#sy-out").style.display = on ? "none" : "block";
+  $("#sy-in").style.display = on ? "block" : "none";
+  if (on) $("#sy-who").textContent = sync.session.email || "";
+  else {
+    if (document.activeElement !== $("#sy-url")) $("#sy-url").value = sync.url;
+    if (document.activeElement !== $("#sy-key")) $("#sy-key").value = sync.key;
+  }
+}
+function readCfg() {
+  sync.url = $("#sy-url").value.trim().replace(/\/+$/, "");
+  sync.key = $("#sy-key").value.trim();
+  persistSync();
+}
+async function authFlow(signup) {
+  readCfg();
+  const email = $("#sy-email").value.trim(), pass = $("#sy-pass").value;
+  if (!/^https:\/\/.+/.test(sync.url) || !sync.key) return setSyncStatus("Rellena la URL del proyecto (https://...) y la clave pública.", true);
+  if (!email || pass.length < 6) return setSyncStatus("Escribe tu correo y una contraseña de al menos 6 caracteres.", true);
+  setSyncStatus(signup ? "Creando cuenta…" : "Iniciando sesión…");
+  try {
+    const d = await authCall(signup ? "signup" : "token?grant_type=password", { email, password: pass });
+    if (!d.access_token) {
+      setSyncStatus("Cuenta creada. Revisa tu correo, confirma el enlace y después pulsa Iniciar sesión.");
+      return;
+    }
+    setSession(d); $("#sy-pass").value = ""; renderSyncUI();
+    await syncNow(true);
+  } catch (e) { setSyncStatus(netMsg(e), true); }
+}
+$("#sy-login").onclick = () => authFlow(false);
+$("#sy-signup").onclick = () => authFlow(true);
+$("#sy-now").onclick = () => syncNow(true);
+$("#sy-logout").onclick = () => {
+  sync.session = null; persistSync(); lastSyncedStable = null; renderSyncUI();
+  setSyncStatus("Sesión cerrada. Tus datos siguen guardados en este dispositivo.");
+};
+$("#sy-url").onchange = readCfg; $("#sy-key").onchange = readCfg;
+
 /* ---------- Render global ---------- */
 function refreshAll() {
   ["#t-subject", "#n-subject", "#q-subject"].forEach(id => fillSelect($(id)));
-  renderTimer(); renderStats(); renderNotes(); renderQuiz(); renderSettings();
+  renderTimer(); renderStats(); renderNotes(); renderQuiz(); renderSettings(); renderSyncUI();
 }
 if (S.timer && S.timer.mode) mode = S.timer.mode;
 refreshAll();
+if (sync.session) syncNow(false);
 setInterval(() => { if (document.getElementById("v-timer").classList.contains("active")) renderTimer(); else if (S.timer && S.timer.endAt && S.timer.endAt <= Date.now()) finishTimer(); }, 500);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) renderTimer(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { renderTimer(); syncSoon(); } });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
